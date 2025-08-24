@@ -22,7 +22,16 @@ export class RedisConnection {
         port: options.port || 'none'
       });
       
-      this.redis = new Redis(options);
+      // Create Redis options with proper type handling
+      const redisOptions: any = { ...options };
+      if (redisOptions.password === undefined) {
+        delete redisOptions.password;
+      }
+      if (redisOptions.db === undefined) {
+        delete redisOptions.db;
+      }
+      
+      this.redis = new Redis(redisOptions);
       
       // Handle connection events
       this.redis.on('connect', () => {

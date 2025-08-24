@@ -86,25 +86,13 @@ jest.mock('bullmq', () => ({
 }));
 
 // Global test utilities
-global.console = {
-  ...console,
-  // Uncomment to suppress console output during tests
-  // log: jest.fn(),
-  // debug: jest.fn(),
-  // info: jest.fn(),
-  // warn: jest.fn(),
-  // error: jest.fn(),
-};
+declare global {
+  var testUtils: {
+    createMockMessage: (content: string, authorId?: string) => any;
+    createMockConfig: () => any;
+  };
+}
 
-// Test timeout
-jest.setTimeout(10000);
-
-// Clean up after each test
-afterEach(() => {
-  jest.clearAllMocks();
-});
-
-// Global test helpers
 global.testUtils = {
   createMockMessage: (content: string, authorId: string = '123456789') => ({
     content,
@@ -139,3 +127,11 @@ global.testUtils = {
     maxReminderDelayDays: 30,
   }),
 };
+
+// Test timeout
+jest.setTimeout(10000);
+
+// Clean up after each test
+afterEach(() => {
+  jest.clearAllMocks();
+});

@@ -25,7 +25,7 @@ export interface ParsedReminderCommand {
   delayMs: number;           // Delay in milliseconds
   timestamp: Date;           // Absolute timestamp when reminder should fire
   isValid: boolean;          // Whether the command is valid
-  error?: string;            // Error message if invalid
+  error?: string | undefined; // Error message if invalid
 }
 
 // Twilio call options
@@ -86,7 +86,7 @@ export interface DiscordCommandContext {
   username: string;          // Discord username
   channelId: string;         // Channel ID where command was issued
   messageId: string;         // Message ID that triggered the command
-  guildId?: string;          // Guild/Server ID (if applicable)
+  guildId?: string | undefined; // Guild/Server ID (if applicable)
   isDM: boolean;             // Whether command was sent in DM
 }
 

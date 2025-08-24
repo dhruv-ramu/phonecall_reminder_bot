@@ -1,5 +1,6 @@
-import { Queue, Job } from 'bullmq';
+import { Queue, Job, Worker } from 'bullmq';
 import { RedisConnection } from '../queue/RedisConnection';
+import { ReminderQueue } from '../queue/ReminderQueue';
 import { TwilioService } from '../twilio/TwilioService';
 import { Config } from '../config/Config';
 import { logger } from '../utils/logger';
@@ -7,89 +8,62 @@ import { ReminderJobData, ReminderJobResult } from '../types/ReminderTypes';
 
 export class ReminderWorker {
   private queue: Queue<ReminderJobData, ReminderJobResult>;
+  private worker: Worker<ReminderJobData, ReminderJobResult>;
   private redisConnection: RedisConnection;
   private twilioService: TwilioService;
   private config: Config;
   private isRunning = false;
 
-  constructor(redisConnection: RedisConnection) {
+  constructor(redisConnection: RedisConnection, reminderQueue: ReminderQueue) {
     this.redisConnection = redisConnection;
     this.config = new Config();
     this.twilioService = new TwilioService(this.config);
     
-    // Create queue instance for listening to completed jobs
-    this.queue = new Queue<ReminderJobData, ReminderJobResult>('reminders', {
-      connection: this.redisConnection.getClient(),
-    });
+    // Get the queue instance from ReminderQueue
+    this.queue = reminderQueue.getQueue();
 
+    // Create worker to process jobs when they're due
+    this.worker = new Worker<ReminderJobData, ReminderJobResult>(
+      'reminders',
+      async (job) => {
+        return await this.processReminderJob(job);
+      },
+      {
+        connection: this.redisConnection.getClient(),
+        concurrency: 5, // Process up to 5 reminders concurrently
+      }
+    );
+
+    this.setupWorkerEventHandlers();
     logger.info('✅ Reminder worker initialized');
   }
 
-  async start(): Promise<void> {
-    if (this.isRunning) {
-      logger.warn('⚠️ Reminder worker is already running');
-      return;
-    }
-
-    try {
-      // Test Twilio connection
-      const twilioConnected = await this.twilioService.testConnection();
-      if (!twilioConnected) {
-        throw new Error('Failed to connect to Twilio');
-      }
-
-      // Start listening for completed jobs
-      this.startJobListener();
-      
-      this.isRunning = true;
-      logger.info('🚀 Reminder worker started successfully');
-
-      // Start periodic health checks
-      this.startHealthChecks();
-
-    } catch (error) {
-      logger.error('❌ Failed to start reminder worker:', error);
-      throw error;
-    }
-  }
-
-  private startJobListener(): void {
-    // Listen for completed jobs
-    this.queue.on('completed', async (job: Job<ReminderJobData, ReminderJobResult>, result: ReminderJobResult) => {
-      try {
-        logger.info(`🎯 Received completed job: ${job.id}`);
-        await this.processCompletedJob(job, result);
-      } catch (error) {
-        logger.error(`❌ Error processing completed job ${job.id}:`, error);
-      }
+  private setupWorkerEventHandlers(): void {
+    // Worker events
+    this.worker.on('error', (error) => {
+      logger.error('❌ Worker error:', error);
     });
 
-    // Listen for failed jobs
-    this.queue.on('failed', async (job: Job<ReminderJobData, ReminderJobResult>, error: Error) => {
-      logger.error(`❌ Job ${job.id} failed in worker:`, error);
+    this.worker.on('failed', (job, error) => {
+      logger.error(`❌ Job ${job?.id} failed in worker:`, error);
       
       // Attempt to retry the job if it's a reminder job
-      if (job.name === 'reminder') {
-        await this.handleFailedJob(job, error);
+      if (job && job.name === 'reminder') {
+        this.handleFailedJob(job, error);
       }
     });
 
-    // Also listen to queue events directly
-    this.queue.on('waiting', (job) => {
-      logger.info(`⏳ Queue event - Job ${job.id} waiting`);
+    this.worker.on('completed', (job) => {
+      logger.info(`✅ Job ${job.id} completed successfully`);
     });
 
-    this.queue.on('active', (job) => {
-      logger.info(`🔄 Queue event - Job ${job.id} active`);
-    });
-
-    logger.info('👂 Started listening for completed reminder jobs');
+    logger.info('👂 Worker event handlers configured');
   }
 
-  private async processCompletedJob(job: Job<ReminderJobData, ReminderJobResult>, result: ReminderJobResult): Promise<void> {
-    const { message, userId, channelId, messageId, ttsVoice, audioFile } = job.data;
+  private async processReminderJob(job: Job<ReminderJobData, ReminderJobResult>): Promise<ReminderJobResult> {
+    const { message, ttsVoice, audioFile } = job.data;
     
-    logger.info(`🔔 Processing completed reminder job ${job.id}: "${message}"`);
+    logger.info(`🔔 Processing reminder job ${job.id}: "${message}"`);
 
     try {
       // Make the Twilio call
@@ -118,34 +92,45 @@ export class ReminderWorker {
       if (callResult.success) {
         logger.info(`✅ Twilio call successful for reminder "${message}". Call SID: ${callResult.callSid}`);
         
-        // Update the job result with call information
-        result.callSid = callResult.callSid;
-        result.message = `Reminder delivered via phone call. Call SID: ${callResult.callSid}`;
+        const result: ReminderJobResult = {
+          success: true,
+          messageId: job.id as string,
+          timestamp: new Date().toISOString(),
+          message: `Reminder delivered via phone call. Call SID: ${callResult.callSid}`,
+        };
+
+        // Only add callSid if it exists
+        if (callResult.callSid) {
+          result.callSid = callResult.callSid;
+        }
+
+        return result;
         
       } else {
         logger.error(`❌ Twilio call failed for reminder "${message}": ${callResult.error}`);
         
-        // Mark the job as failed
-        result.success = false;
-        result.message = `Failed to make phone call: ${callResult.error}`;
-        
-        // Attempt to retry the call
-        await this.scheduleRetry(job);
+        return {
+          success: false,
+          messageId: job.id as string,
+          timestamp: new Date().toISOString(),
+          message: `Failed to make phone call: ${callResult.error}`,
+        };
       }
 
     } catch (error) {
       logger.error(`❌ Error processing reminder job ${job.id}:`, error);
       
-      result.success = false;
-      result.message = `Error processing reminder: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      
-      // Attempt to retry the call
-      await this.scheduleRetry(job);
+      return {
+        success: false,
+        messageId: job.id as string,
+        timestamp: new Date().toISOString(),
+        message: `Error processing reminder: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
   }
 
   private async handleFailedJob(job: Job<ReminderJobData, ReminderJobResult>, error: Error): Promise<void> {
-    const { message, userId } = job.data;
+    const { message } = job.data;
     
     logger.warn(`⚠️ Handling failed reminder job ${job.id}: "${message}"`);
     
@@ -154,9 +139,6 @@ export class ReminderWorker {
       await this.scheduleRetry(job);
     } else {
       logger.error(`❌ Job ${job.id} failed permanently: ${error.message}`);
-      
-      // Log the permanent failure for monitoring
-      // In a production system, you might want to send alerts or notifications
     }
   }
 
@@ -199,15 +181,48 @@ export class ReminderWorker {
     }
   }
 
+  async start(): Promise<void> {
+    if (this.isRunning) {
+      logger.warn('⚠️ Reminder worker is already running');
+      return;
+    }
+
+    try {
+      // Test Twilio connection
+      const twilioConnected = await this.twilioService.testConnection();
+      if (!twilioConnected) {
+        throw new Error('Failed to connect to Twilio');
+      }
+
+      // Start the worker if it's not already running
+      if (!this.worker.isRunning()) {
+        await this.worker.run();
+      }
+      
+      this.isRunning = true;
+      logger.info('🚀 Reminder worker started successfully');
+
+      // Start periodic health checks
+      this.startHealthChecks();
+
+    } catch (error) {
+      logger.error('❌ Failed to start reminder worker:', error);
+      throw error;
+    }
+  }
+
   private startHealthChecks(): void {
     // Run health checks every 5 minutes
-    setInterval(async () => {
+    const healthCheckInterval = setInterval(async () => {
       try {
         await this.performHealthCheck();
       } catch (error) {
         logger.error('❌ Health check failed:', error);
       }
     }, 5 * 60 * 1000);
+
+    // Store the interval ID for cleanup
+    (this as any).healthCheckInterval = healthCheckInterval;
 
     logger.info('🏥 Started periodic health checks');
   }
@@ -248,8 +263,13 @@ export class ReminderWorker {
     try {
       this.isRunning = false;
       
-      // Close the queue connection
-      await this.queue.close();
+      // Clear health check interval
+      if ((this as any).healthCheckInterval) {
+        clearInterval((this as any).healthCheckInterval);
+      }
+      
+      // Close the worker
+      await this.worker.close();
       
       logger.info('🛑 Reminder worker stopped successfully');
       
@@ -281,12 +301,8 @@ export class ReminderWorker {
       }
 
       logger.info(`🔧 Force processing job ${jobId}`);
-      await this.processCompletedJob(job, {
-        success: true,
-        messageId: jobId,
-        timestamp: new Date().toISOString(),
-        message: 'Force processed',
-      });
+      const result = await this.processReminderJob(job);
+      logger.info(`✅ Force processed job ${jobId} with result:`, result);
 
       return true;
       

@@ -2,13 +2,9 @@ import {
   Client,
   GatewayIntentBits,
   Message,
-  TextChannel,
   DMChannel,
-  Guild,
-  Collection,
   Events,
 } from 'discord.js';
-import { RedisConnection } from '../queue/RedisConnection';
 import { ReminderQueue } from '../queue/ReminderQueue';
 import { Config } from '../config/Config';
 import { logger } from '../utils/logger';
@@ -18,14 +14,12 @@ import { ParsedReminderCommand, DiscordCommandContext } from '../types/ReminderT
 export class DiscordBot {
   private client: Client;
   private config: Config;
-  private redisConnection: RedisConnection;
   private reminderQueue: ReminderQueue;
   private commandPrefix = '?';
 
-  constructor(config: Config, redisConnection: RedisConnection) {
+  constructor(config: Config, reminderQueue: ReminderQueue) {
     this.config = config;
-    this.redisConnection = redisConnection;
-    this.reminderQueue = new ReminderQueue(redisConnection);
+    this.reminderQueue = reminderQueue;
 
     // Create Discord client with required intents
     this.client = new Client({
@@ -154,7 +148,7 @@ export class DiscordBot {
         },
       };
 
-      await message.channel.send({ embeds: [embed] });
+      await this.safeSendMessage(message.channel, { embeds: [embed] });
 
       logger.info(`📅 Reminder scheduled: "${parsed.message}" for user ${context.username} in ${formattedDelay}`);
 
@@ -176,14 +170,14 @@ export class DiscordBot {
       const cancelled = await this.reminderQueue.cancelReminder(content);
       
       if (cancelled) {
-        await message.channel.send({
-          embeds: [{
-            color: 0xff9900,
-            title: '❌ Reminder Cancelled',
-            description: `Successfully cancelled reminder with ID: ${content}`,
-            timestamp: new Date(),
-          }],
-        });
+        const embed = {
+          color: 0xff9900,
+          title: '❌ Reminder Cancelled',
+          description: `Successfully cancelled reminder with ID: ${content}`,
+          timestamp: new Date(),
+        };
+        
+        await this.safeSendMessage(message.channel, { embeds: [embed] });
       } else {
         await this.sendErrorMessage(message.channel, `No reminder found with ID: ${content}`);
       }
@@ -198,14 +192,14 @@ export class DiscordBot {
       const reminders = await this.reminderQueue.getUserReminders(message.author.id);
       
       if (reminders.length === 0) {
-        await message.channel.send({
-          embeds: [{
-            color: 0x0099ff,
-            title: '📋 Your Reminders',
-            description: 'You have no active reminders.',
-            timestamp: new Date(),
-          }],
-        });
+        const embed = {
+          color: 0x0099ff,
+          title: '📋 Your Reminders',
+          description: 'You have no active reminders.',
+          timestamp: new Date(),
+        };
+        
+        await this.safeSendMessage(message.channel, { embeds: [embed] });
         return;
       }
 
@@ -223,7 +217,7 @@ export class DiscordBot {
         },
       };
 
-      await message.channel.send({ embeds: [embed] });
+      await this.safeSendMessage(message.channel, { embeds: [embed] });
 
     } catch (error) {
       logger.error('❌ Error listing reminders:', error);
@@ -269,26 +263,20 @@ export class DiscordBot {
       },
     };
 
-    await message.channel.send({ embeds: [helpEmbed] });
+    await this.safeSendMessage(message.channel, { embeds: [helpEmbed] });
   }
 
   private async handleStatusCommand(message: Message): Promise<void> {
     try {
       const stats = await this.reminderQueue.getQueueStats();
-      const redisHealth = await this.redisConnection.healthCheck();
 
       const statusEmbed = {
-        color: redisHealth ? 0x00ff00 : 0xff0000,
+        color: 0x00ff00,
         title: '📊 Bot Status',
         fields: [
           {
             name: '🟢 Bot Status',
             value: 'Online and running',
-            inline: true,
-          },
-          {
-            name: '🔗 Redis Connection',
-            value: redisHealth ? 'Connected' : 'Disconnected',
             inline: true,
           },
           {
@@ -300,7 +288,7 @@ export class DiscordBot {
         timestamp: new Date(),
       };
 
-      await message.channel.send({ embeds: [statusEmbed] });
+      await this.safeSendMessage(message.channel, { embeds: [statusEmbed] });
 
     } catch (error) {
       logger.error('❌ Error getting status:', error);
@@ -354,7 +342,7 @@ export class DiscordBot {
     };
   }
 
-  private async sendErrorMessage(channel: TextChannel | DMChannel, message: string): Promise<void> {
+  private async sendErrorMessage(channel: any, message: string): Promise<void> {
     const errorEmbed = {
       color: 0xff0000,
       title: '❌ Error',
@@ -362,7 +350,17 @@ export class DiscordBot {
       timestamp: new Date(),
     };
 
-    await channel.send({ embeds: [errorEmbed] });
+    await this.safeSendMessage(channel, { embeds: [errorEmbed] });
+  }
+
+  private async safeSendMessage(channel: any, content: any): Promise<void> {
+    try {
+      if (channel && typeof channel.send === 'function') {
+        await channel.send(content);
+      }
+    } catch (error) {
+      logger.error('❌ Failed to send message:', error);
+    }
   }
 
   async start(): Promise<void> {

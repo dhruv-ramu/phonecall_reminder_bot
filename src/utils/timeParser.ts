@@ -305,7 +305,6 @@ export class TimeParser {
       }
 
       const now = moment();
-      const targetTime = parsed.toDate();
 
       // If the parsed time is before now, it might be next week
       if (parsed.isBefore(now)) {

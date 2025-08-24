@@ -23,7 +23,7 @@ async function makeCustomCall() {
 
     // Make the call with custom TTS message
     const message = 'Greetings. This is quite interesting, isn\'t it?';
-    const targetPhone = '';
+    const targetPhone = '+919513330342';
     
     console.log(`📱 Calling: ${targetPhone}`);
     console.log(`💬 TTS Message: "${message}"`);

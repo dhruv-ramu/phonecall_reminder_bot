@@ -148,7 +148,7 @@ export class GoogleCalendarService {
       const endTime = new Date(now.getTime() + 24 * 60 * 60 * 1000); // Next 24 hours
 
       const response = await this.calendar.events.list({
-        calendarId: 'primary',
+        calendarId: this.config.googleCalendarId,
         timeMin: now.toISOString(),
         timeMax: endTime.toISOString(),
         singleEvents: true,
@@ -169,7 +169,7 @@ export class GoogleCalendarService {
               endTime: item.end?.dateTime ? new Date(item.end.dateTime) : null,
               location: item.location || '',
               attendees: item.attendees?.map((a: any) => a.email || '') || [],
-              calendarId: item.organizer?.email || 'primary',
+              calendarId: item.organizer?.email || this.config.googleCalendarId,
             });
           }
         }
@@ -271,7 +271,7 @@ export class GoogleCalendarService {
       const endTime = new Date(now.getTime() + hours * 60 * 60 * 1000);
 
       const response = await this.calendar.events.list({
-        calendarId: 'primary',
+        calendarId: this.config.googleCalendarId,
         timeMin: now.toISOString(),
         timeMax: endTime.toISOString(),
         singleEvents: true,
@@ -292,7 +292,7 @@ export class GoogleCalendarService {
               endTime: item.end?.dateTime ? new Date(item.end.dateTime) : null,
               location: item.location || '',
               attendees: item.attendees?.map((a: any) => a.email || '') || [],
-              calendarId: item.organizer?.email || 'primary',
+              calendarId: item.organizer?.email || this.config.googleCalendarId,
             });
           }
         }

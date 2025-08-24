@@ -45,25 +45,25 @@ async function debugCalendarAccess() {
       console.log('❌ Failed to list calendars:', error.message);
     }
 
-    // Test 2: Try to access primary calendar directly
-    console.log('\n🎯 Testing primary calendar access...');
+    // Test 2: Try to access your calendar directly
+    console.log('\n🎯 Testing your calendar access...');
     try {
-      const primaryCalendar = await calendar.calendars.get({
-        calendarId: 'primary'
+      const yourCalendar = await calendar.calendars.get({
+        calendarId: process.env.GOOGLE_CALENDAR_ID
       });
-      console.log('✅ Primary calendar accessible:', primaryCalendar.data.summary);
+      console.log('✅ Your calendar accessible:', yourCalendar.data.summary);
     } catch (error) {
-      console.log('❌ Primary calendar not accessible:', error.message);
+      console.log('❌ Your calendar not accessible:', error.message);
     }
 
-    // Test 3: Try to list events from primary calendar
-    console.log('\n📋 Testing event listing...');
+    // Test 3: Try to list events from your calendar
+    console.log('\n📋 Testing event listing from your calendar...');
     try {
       const now = new Date();
       const endTime = new Date(now.getTime() + 24 * 60 * 60 * 1000); // Next 24 hours
       
       const events = await calendar.events.list({
-        calendarId: 'primary',
+        calendarId: process.env.GOOGLE_CALENDAR_ID,
         timeMin: now.toISOString(),
         timeMax: endTime.toISOString(),
         singleEvents: true,
@@ -71,7 +71,7 @@ async function debugCalendarAccess() {
         maxResults: 10,
       });
       
-      console.log(`✅ Found ${events.data.items?.length || 0} events in primary calendar:`);
+      console.log(`✅ Found ${events.data.items?.length || 0} events in your calendar:`);
       
       if (events.data.items && events.data.items.length > 0) {
         events.data.items.forEach((event, index) => {

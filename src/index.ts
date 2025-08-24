@@ -4,6 +4,7 @@ import { DiscordBot } from './bot/DiscordBot';
 import { RedisConnection } from './queue/RedisConnection';
 import { ReminderQueue } from './queue/ReminderQueue';
 import { ReminderWorker } from './worker/ReminderWorker';
+import { GoogleCalendarService } from './calendar/GoogleCalendarService';
 import { Config } from './config/Config';
 
 // Load environment variables
@@ -11,7 +12,7 @@ dotenv.config();
 
 async function main() {
   try {
-    logger.info('🚀 Starting Discord Reminder Bot...');
+    logger.info('🚀 Starting Discord Reminder Bot with Google Calendar Integration...');
 
     // Initialize configuration
     const config = new Config();
@@ -30,6 +31,21 @@ async function main() {
     await reminderWorker.start();
     logger.info('✅ Reminder worker started');
 
+    // Initialize Google Calendar service (if enabled)
+    let calendarService: GoogleCalendarService | null = null;
+    if (config.googleCalendarEnabled) {
+      try {
+        calendarService = new GoogleCalendarService(config, reminderQueue);
+        await calendarService.start();
+        logger.info('✅ Google Calendar service started');
+      } catch (error) {
+        logger.error('❌ Failed to start Google Calendar service:', error);
+        logger.warn('⚠️ Continuing without Google Calendar integration');
+      }
+    } else {
+      logger.info('ℹ️ Google Calendar integration is disabled');
+    }
+
     // Initialize Discord bot
     const discordBot = new DiscordBot(config, reminderQueue);
     await discordBot.start();
@@ -41,6 +57,9 @@ async function main() {
       
       await discordBot.stop();
       await reminderWorker.stop();
+      if (calendarService) {
+        await calendarService.stop();
+      }
       await redisConnection.disconnect();
       
       logger.info('✅ Shutdown complete');
@@ -52,6 +71,9 @@ async function main() {
       
       await discordBot.stop();
       await reminderWorker.stop();
+      if (calendarService) {
+        await calendarService.stop();
+      }
       await redisConnection.disconnect();
       
       logger.info('✅ Shutdown complete');
@@ -61,6 +83,9 @@ async function main() {
     logger.info('🎉 Discord Reminder Bot is now running!');
     logger.info(`📱 Target phone: ${config.targetPhoneNumber}`);
     logger.info(`🔔 Use ?remind <message> -t <delay> to set reminders`);
+    if (config.googleCalendarEnabled) {
+      logger.info(`📅 Google Calendar integration: ENABLED (${config.calendarReminderAdvanceMinutes} min advance)`);
+    }
 
   } catch (error) {
     logger.error('❌ Failed to start application:', error);

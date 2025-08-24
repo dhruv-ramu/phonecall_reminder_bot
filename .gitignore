@@ -6,7 +6,7 @@
 .env.test
 .env.test.local
 .env.test.backup
-
+google-service-account-key.json
 # Logs
 logs
 *.log

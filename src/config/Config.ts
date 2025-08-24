@@ -31,6 +31,14 @@ const ConfigSchema = z.object({
   defaultCallDuration: z.number().min(10).max(60).default(20),
   maxRemindersPerUser: z.number().min(1).max(1000).default(50),
   maxReminderDelayDays: z.number().min(1).max(365).default(30),
+
+  // Google Calendar Configuration
+  googleCalendarEnabled: z.boolean().default(false),
+  googleServiceAccountKeyPath: z.string().optional(),
+  googleCalendarId: z.string().default('primary'),
+  calendarSyncIntervalMinutes: z.number().min(1).max(60).default(5),
+  calendarReminderAdvanceMinutes: z.number().min(1).max(1440).default(10),
+  calendarMaxEventsToProcess: z.number().min(1).max(1000).default(50),
 });
 
 export type ConfigType = z.infer<typeof ConfigSchema>;
@@ -68,6 +76,13 @@ export class Config {
       defaultCallDuration: parseInt(process.env.DEFAULT_CALL_DURATION || '20', 10),
       maxRemindersPerUser: parseInt(process.env.MAX_REMINDERS_PER_USER || '50', 10),
       maxReminderDelayDays: parseInt(process.env.MAX_REMINDER_DELAY_DAYS || '30', 10),
+
+      googleCalendarEnabled: process.env.GOOGLE_CALENDAR_ENABLED === 'true',
+      googleServiceAccountKeyPath: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH,
+      googleCalendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+      calendarSyncIntervalMinutes: parseInt(process.env.CALENDAR_SYNC_INTERVAL_MINUTES || '5', 10),
+      calendarReminderAdvanceMinutes: parseInt(process.env.CALENDAR_REMINDER_ADVANCE_MINUTES || '10', 10),
+      calendarMaxEventsToProcess: parseInt(process.env.CALENDAR_MAX_EVENTS_TO_PROCESS || '50', 10),
     };
 
     try {
@@ -106,6 +121,14 @@ export class Config {
   get defaultCallDuration(): number { return this.config.defaultCallDuration; }
   get maxRemindersPerUser(): number { return this.config.maxRemindersPerUser; }
   get maxReminderDelayDays(): number { return this.config.maxReminderDelayDays; }
+
+  // Google Calendar Configuration
+  get googleCalendarEnabled(): boolean { return this.config.googleCalendarEnabled; }
+  get googleServiceAccountKeyPath(): string | undefined { return this.config.googleServiceAccountKeyPath; }
+  get googleCalendarId(): string { return this.config.googleCalendarId; }
+  get calendarSyncIntervalMinutes(): number { return this.config.calendarSyncIntervalMinutes; }
+  get calendarReminderAdvanceMinutes(): number { return this.config.calendarReminderAdvanceMinutes; }
+  get calendarMaxEventsToProcess(): number { return this.config.calendarMaxEventsToProcess; }
 
   // Helper methods
   get isDevelopment(): boolean { return this.config.nodeEnv === 'development'; }

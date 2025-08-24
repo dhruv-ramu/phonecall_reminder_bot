@@ -75,6 +75,8 @@ export class DiscordBot {
         await this.handleHelpCommand(message);
       } else if (command.startsWith('status')) {
         await this.handleStatusCommand(message);
+      } else if (command.startsWith('calendar')) {
+        await this.handleCalendarCommand(message);
       }
     } catch (error) {
       logger.error('❌ Error handling message:', error);
@@ -252,8 +254,13 @@ export class DiscordBot {
           inline: false,
         },
         {
+          name: '📅 Google Calendar Integration',
+          value: '`?calendar events` - View upcoming calendar events\n`?calendar sync` - Manually sync calendar\n`?calendar status` - Check calendar integration status',
+          inline: false,
+        },
+        {
           name: '💡 Examples',
-          value: '```\n?remind Attend meeting! -t 6h\n?remind Call mom -t 2h30m\n?remind Daily standup -t 9am\n?remind Project deadline -t 12/31/2024 5pm```',
+          value: '```\n?remind Attend meeting! -t 6h\n?remind Call mom -t 2h30m\n?remind Daily standup -t 9am\n?remind Project deadline -t 12/31/2024 5pm\n?calendar events\n?calendar sync```',
           inline: false,
         },
       ],
@@ -293,6 +300,122 @@ export class DiscordBot {
     } catch (error) {
       logger.error('❌ Error getting status:', error);
       await this.sendErrorMessage(message.channel, 'Failed to retrieve bot status. Please try again.');
+    }
+  }
+
+  private async handleCalendarCommand(message: Message): Promise<void> {
+    const content = message.content.slice(this.commandPrefix.length + 'calendar'.length).trim();
+    
+    if (!content) {
+      await this.sendErrorMessage(message.channel, 'Please specify a calendar action. Use `?help` for examples.');
+      return;
+    }
+
+    const action = content.split(' ')[0].toLowerCase();
+    
+    switch (action) {
+      case 'events':
+        await this.handleCalendarEventsCommand(message);
+        break;
+      case 'sync':
+        await this.handleCalendarSyncCommand(message);
+        break;
+      case 'status':
+        await this.handleCalendarStatusCommand(message);
+        break;
+      default:
+        await this.sendErrorMessage(message.channel, `Unknown calendar action: ${action}. Use \`?help\` for available actions.`);
+    }
+  }
+
+  private async handleCalendarEventsCommand(message: Message): Promise<void> {
+    try {
+      // This would integrate with GoogleCalendarService to show upcoming events
+      const embed = {
+        color: 0x4285f4, // Google Calendar blue
+        title: '📅 Google Calendar Events',
+        description: 'Calendar integration is being set up. This feature will show your upcoming events and automatically send phone reminders.',
+        fields: [
+          {
+            name: '🔄 Status',
+            value: 'Calendar integration is being configured',
+            inline: true,
+          },
+          {
+            name: '⏰ Reminder Timing',
+            value: '10 minutes before each event',
+            inline: true,
+          },
+        ],
+        timestamp: new Date(),
+        footer: {
+          text: 'Use ?calendar sync to manually sync events',
+        },
+      };
+
+      await this.safeSendMessage(message.channel, { embeds: [embed] });
+
+    } catch (error) {
+      logger.error('❌ Error handling calendar events command:', error);
+      await this.sendErrorMessage(message.channel, 'Failed to retrieve calendar events. Please try again.');
+    }
+  }
+
+  private async handleCalendarSyncCommand(message: Message): Promise<void> {
+    try {
+      const embed = {
+        color: 0x4285f4,
+        title: '🔄 Calendar Sync',
+        description: 'Calendar sync is being set up. This will automatically sync your Google Calendar every 5 minutes.',
+        fields: [
+          {
+            name: '📱 Phone Reminders',
+            value: 'You will receive phone calls 10 minutes before each calendar event',
+            inline: false,
+          },
+        ],
+        timestamp: new Date(),
+      };
+
+      await this.safeSendMessage(message.channel, { embeds: [embed] });
+
+    } catch (error) {
+      logger.error('❌ Error handling calendar sync command:', error);
+      await this.sendErrorMessage(message.channel, 'Failed to sync calendar. Please try again.');
+    }
+  }
+
+  private async handleCalendarStatusCommand(message: Message): Promise<void> {
+    try {
+      const embed = {
+        color: 0x4285f4,
+        title: '📊 Calendar Status',
+        description: 'Google Calendar integration status',
+        fields: [
+          {
+            name: '🔗 Connection',
+            value: 'Being configured',
+            inline: true,
+          },
+          {
+            name: '🔄 Sync Interval',
+            value: 'Every 5 minutes',
+            inline: true,
+          },
+          {
+            name: '⏰ Reminder Advance',
+            value: '10 minutes before events',
+            inline: true,
+          },
+        ],
+        timestamp: new Date(),
+      };
+
+      await this.safeSendMessage(message.channel, { embeds: [embed] });
+
+    } catch (error) {
+      logger.error('❌ Error handling calendar status command:', error);
+      await this.sendErrorMessage(message.channel, 'Failed to get calendar status. Please try again.');
     }
   }
 

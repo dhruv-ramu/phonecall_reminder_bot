@@ -1,11 +1,10 @@
-import { Queue, Job, QueueScheduler, Worker } from 'bullmq';
+import { Queue, Job, Worker } from 'bullmq';
 import { RedisConnection } from './RedisConnection';
 import { logger } from '../utils/logger';
 import { ReminderJobData, ReminderJobResult } from '../types/ReminderTypes';
 
 export class ReminderQueue {
   private queue: Queue<ReminderJobData, ReminderJobResult>;
-  private scheduler: QueueScheduler;
   private worker: Worker<ReminderJobData, ReminderJobResult>;
   private redisConnection: RedisConnection;
 
@@ -26,10 +25,8 @@ export class ReminderQueue {
       },
     });
 
-    // Create scheduler for delayed jobs
-    this.scheduler = new QueueScheduler('reminders', {
-      connection: this.redisConnection.getClient(),
-    });
+    // Note: QueueScheduler removed for BullMQ v5 compatibility
+    // Delayed jobs are handled automatically by the Queue
 
     // Create worker to process jobs
     this.worker = new Worker<ReminderJobData, ReminderJobResult>(
@@ -47,24 +44,7 @@ export class ReminderQueue {
   }
 
   private setupEventHandlers(): void {
-    // Queue events
-    this.queue.on('waiting', (job) => {
-      logger.info(`⏳ Reminder job ${job.id} waiting to be processed`);
-    });
-
-    this.queue.on('active', (job) => {
-      logger.info(`🔄 Processing reminder job ${job.id}: ${job.data.message}`);
-    });
-
-    this.queue.on('completed', (job, result) => {
-      logger.info(`✅ Reminder job ${job.id} completed successfully`, { result });
-    });
-
-    this.queue.on('failed', (job, error) => {
-      logger.error(`❌ Reminder job ${job.id} failed:`, error);
-    });
-
-    // Worker events
+    // Worker events only - queue events removed for BullMQ v5 compatibility
     this.worker.on('error', (error) => {
       logger.error('❌ Worker error:', error);
     });
@@ -198,7 +178,6 @@ export class ReminderQueue {
   async close(): Promise<void> {
     try {
       await this.worker.close();
-      await this.scheduler.close();
       await this.queue.close();
       logger.info('🔌 Reminder queue closed');
     } catch (error) {

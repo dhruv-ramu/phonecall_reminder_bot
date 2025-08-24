@@ -6,13 +6,21 @@ export class RedisConnection {
   private redis: Redis | null = null;
   private config: Config;
 
-  constructor() {
-    this.config = new Config();
+  constructor(config: Config) {
+    this.config = config;
   }
 
   async connect(): Promise<void> {
     try {
       const options = this.config.getRedisOptions();
+      
+      // Debug logging
+      logger.info('🔧 Redis connection options:', {
+        hasUrl: !!options.url,
+        url: options.url ? options.url.substring(0, 20) + '...' : 'none',
+        host: options.host || 'none',
+        port: options.port || 'none'
+      });
       
       this.redis = new Redis(options);
       

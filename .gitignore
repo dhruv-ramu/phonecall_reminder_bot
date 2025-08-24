@@ -1,5 +1,11 @@
 .env
-The following is the default Github Node gitignore file:
+.env.local
+.env.backup
+.env.development
+.env.production
+.env.test
+.env.test.local
+.env.test.backup
 
 # Logs
 logs

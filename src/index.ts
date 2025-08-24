@@ -17,7 +17,7 @@ async function main() {
     logger.info('✅ Configuration loaded');
 
     // Initialize Redis connection
-    const redisConnection = new RedisConnection();
+    const redisConnection = new RedisConnection(config);
     await redisConnection.connect();
     logger.info('✅ Redis connected');
 

@@ -115,7 +115,10 @@ export class Config {
   // Get Redis connection options
   getRedisOptions() {
     if (this.config.redisUrl) {
-      return { url: this.config.redisUrl };
+      return { 
+        url: this.config.redisUrl,
+        maxRetriesPerRequest: null // Required for BullMQ v5
+      };
     }
 
     return {
@@ -124,7 +127,7 @@ export class Config {
       password: this.config.redisPassword,
       db: this.config.redisDb,
       retryDelayOnFailover: 100,
-      maxRetriesPerRequest: 3,
+      maxRetriesPerRequest: null, // Required for BullMQ v5
     };
   }
 }

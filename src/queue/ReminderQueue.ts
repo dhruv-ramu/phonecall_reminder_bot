@@ -1,11 +1,10 @@
-import { Queue, Job, Worker } from 'bullmq';
+import { Queue, Job } from 'bullmq';
 import { RedisConnection } from './RedisConnection';
 import { logger } from '../utils/logger';
 import { ReminderJobData, ReminderJobResult } from '../types/ReminderTypes';
 
 export class ReminderQueue {
   private queue: Queue<ReminderJobData, ReminderJobResult>;
-  private worker: Worker<ReminderJobData, ReminderJobResult>;
   private redisConnection: RedisConnection;
 
   constructor(redisConnection: RedisConnection) {
@@ -25,48 +24,7 @@ export class ReminderQueue {
       },
     });
 
-    // Note: QueueScheduler removed for BullMQ v5 compatibility
-    // Delayed jobs are handled automatically by the Queue
-
-    // Create worker to process jobs
-    this.worker = new Worker<ReminderJobData, ReminderJobResult>(
-      'reminders',
-      async (job) => {
-        return await this.processReminderJob(job);
-      },
-      {
-        connection: this.redisConnection.getClient(),
-        concurrency: 5, // Process up to 5 reminders concurrently
-      }
-    );
-
-    this.setupEventHandlers();
-  }
-
-  private setupEventHandlers(): void {
-    // Worker events only - queue events removed for BullMQ v5 compatibility
-    this.worker.on('error', (error) => {
-      logger.error('❌ Worker error:', error);
-    });
-
-    this.worker.on('failed', (job, error) => {
-      logger.error(`❌ Job ${job?.id} failed in worker:`, error);
-    });
-  }
-
-  private async processReminderJob(job: Job<ReminderJobData, ReminderJobResult>): Promise<ReminderJobResult> {
-    const { message, userId, channelId, messageId } = job.data;
-    
-    logger.info(`🔔 Processing reminder: "${message}" for user ${userId}`);
-    
-    // This is a placeholder - the actual Twilio call will be made by the ReminderWorker
-    // which listens to completed jobs
-    return {
-      success: true,
-      messageId: job.id as string,
-      timestamp: new Date().toISOString(),
-      message: 'Reminder processed successfully',
-    };
+    logger.info('✅ Reminder queue initialized');
   }
 
   async addReminder(
@@ -88,10 +46,14 @@ export class ReminderQueue {
         channelId,
         messageId,
         ttsVoice: options?.ttsVoice || 'alice',
-        audioFile: options?.audioFile,
         priority: options?.priority || 0,
         createdAt: new Date().toISOString(),
       };
+
+      // Only add audioFile if it's provided
+      if (options?.audioFile) {
+        jobData.audioFile = options.audioFile;
+      }
 
       const job = await this.queue.add(
         'reminder',
@@ -114,7 +76,8 @@ export class ReminderQueue {
 
   async getReminder(jobId: string): Promise<Job<ReminderJobData, ReminderJobResult> | null> {
     try {
-      return await this.queue.getJob(jobId);
+      const job = await this.queue.getJob(jobId);
+      return job || null;
     } catch (error) {
       logger.error(`❌ Failed to get reminder job ${jobId}:`, error);
       return null;
@@ -177,12 +140,15 @@ export class ReminderQueue {
 
   async close(): Promise<void> {
     try {
-      await this.worker.close();
       await this.queue.close();
       logger.info('🔌 Reminder queue closed');
     } catch (error) {
       logger.error('❌ Error closing reminder queue:', error);
       throw error;
     }
+  }
+
+  getQueue(): Queue<ReminderJobData, ReminderJobResult> {
+    return this.queue;
   }
 }

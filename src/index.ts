@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { logger } from './utils/logger';
 import { DiscordBot } from './bot/DiscordBot';
 import { RedisConnection } from './queue/RedisConnection';
+import { ReminderQueue } from './queue/ReminderQueue';
 import { ReminderWorker } from './worker/ReminderWorker';
 import { Config } from './config/Config';
 
@@ -21,13 +22,16 @@ async function main() {
     await redisConnection.connect();
     logger.info('✅ Redis connected');
 
-    // Initialize reminder worker
-    const reminderWorker = new ReminderWorker(redisConnection);
+    // Initialize reminder queue
+    const reminderQueue = new ReminderQueue(redisConnection);
+    
+    // Initialize reminder worker with the queue
+    const reminderWorker = new ReminderWorker(redisConnection, reminderQueue);
     await reminderWorker.start();
     logger.info('✅ Reminder worker started');
 
     // Initialize Discord bot
-    const discordBot = new DiscordBot(config, redisConnection);
+    const discordBot = new DiscordBot(config, reminderQueue);
     await discordBot.start();
     logger.info('✅ Discord bot started');
 

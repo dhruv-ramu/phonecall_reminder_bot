@@ -57,6 +57,7 @@ export class ReminderWorker {
     // Listen for completed jobs
     this.queue.on('completed', async (job: Job<ReminderJobData, ReminderJobResult>, result: ReminderJobResult) => {
       try {
+        logger.info(`🎯 Received completed job: ${job.id}`);
         await this.processCompletedJob(job, result);
       } catch (error) {
         logger.error(`❌ Error processing completed job ${job.id}:`, error);
@@ -65,12 +66,21 @@ export class ReminderWorker {
 
     // Listen for failed jobs
     this.queue.on('failed', async (job: Job<ReminderJobData, ReminderJobResult>, error: Error) => {
-      logger.error(`❌ Job ${job.id} failed:`, error);
+      logger.error(`❌ Job ${job.id} failed in worker:`, error);
       
       // Attempt to retry the job if it's a reminder job
       if (job.name === 'reminder') {
         await this.handleFailedJob(job, error);
       }
+    });
+
+    // Also listen to queue events directly
+    this.queue.on('waiting', (job) => {
+      logger.info(`⏳ Queue event - Job ${job.id} waiting`);
+    });
+
+    this.queue.on('active', (job) => {
+      logger.info(`🔄 Queue event - Job ${job.id} active`);
     });
 
     logger.info('👂 Started listening for completed reminder jobs');
